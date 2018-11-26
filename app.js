@@ -10,9 +10,8 @@ const formatDateMs = (date) => {
   return new Date(date).getTime()
 }
 const formatLoadAmount = (str) => {
-  const formatted = str.split('$').splice(1, 1)[0]
-  // console.log(formatted);
-  return formatted
+  const formatted = parseFloat(str.split('$').splice(1, 1)[0])
+  return formatted.toFixed(2)
 }
 const countDays = (date1, date2) => {
   const msInOneDay = 1000*60*60*24
@@ -21,10 +20,22 @@ const countDays = (date1, date2) => {
   const difference = Math.round((date2 - date1)/msInOneDay)
   return difference
 }
+
+const sendResult = (daily_limit, weekly_limit, daily_transactions, validate) => {
+  if (daily_limit < 0 || weekly_limit < 0 || daily_transactions > 3) {
+    validate.accepted = false;
+    app.load_validation.push(validate)
+  } else {
+    validate.accepted = true;
+    app.load_validation.push(validate)
+  }
+}
+
 app.parseLoadAttempts = (array) => {
   array.map((item) => {
     const {customer_id, id, time, load_amount} = item
     const validate = {id, customer_id}
+
     if(!app.track_customers[customer_id]){
       // initialize customer
       app.track_customers[customer_id] = {};
@@ -34,55 +45,57 @@ app.parseLoadAttempts = (array) => {
       app.track_customers[customer_id].week = {
         start: app.track_customers[customer_id].day,
         current: time,
-      };
+    };
       // start week count
       app.track_customers[customer_id].week.count = countDays(app.track_customers[customer_id].week.start, app.track_customers[customer_id].week.current);
-      
+
       app.track_customers[customer_id].daily_limit = 5000 - formatLoadAmount(load_amount);
       app.track_customers[customer_id].weekly_limit = 20000 - formatLoadAmount(load_amount);
       
-      let {daily_limit, weekly_limit, daily_transactions, week} = app.track_customers[customer_id];
+      // initialize useful variables in this scope
+      let {daily_limit, weekly_limit, daily_transactions} = app.track_customers[customer_id];
 
-      if (daily_limit < 0 || weekly_limit < 0 || daily_transactions > 3 || week.count > 7) {
-        validate.accepted = false;
-        app.load_validation.push(validate)
-      } else {
-        validate.accepted = true;
-        app.load_validation.push(validate)
-      }
+      sendResult(daily_limit,weekly_limit,daily_transactions, validate)
       
     } else {
-      let { day } = app.track_customers[customer_id]
+      // initialize useful variables in this scope
+      let { day, week, weekly_limit } = app.track_customers[customer_id]
+
+      // Update the current day
+      app.track_customers[customer_id].day = time;
 
       // Compare current transaction date to previous one
       const timeBetweenTransactions = countDays(day, time);
 
+      // console.log(`User: ${customer_id}`,`Day: ${day}`, `Time: ${time}`, `Count: ${timeBetweenTransactions}`);
+
+      const updateWeek = (week) => {
+        // function to update week
+        // let {start, current, count} = week
+        week.current = time;
+        week.count = countDays(week.start, week.current)
+
+        if(week.count > 6){
+          week.start = time;
+          week.current = time;
+          week.count = countDays(week.start, week.current)
+        } 
+        return week
+      }
+
+      week = updateWeek(week)
+
       if(timeBetweenTransactions < 0){
         daily_transactions++;
-        weekly_transactions++;
         daily_limit -= formatLoadAmount(load_amount);
         weekly_limit -= formatLoadAmount(load_amount);
+        sendResult(daily_limit, weekly_limit, daily_transactions, validate)
 
-        if(daily_limit < 0 || weekly_limit < 0 || daily_transactions > 3){
-          validate.accepted = false;
-          app.load_validation.push(validate)
-        } else {
-          validate.accepted = true;
-          app.load_validation.push(validate)
-        }
       } else {
         daily_transactions = 1;
         daily_limit = 5000 - formatLoadAmount(load_amount);
         weekly_limit = 20000 - formatLoadAmount(load_amount);
-
-        if (daily_limit < 0 || weekly_limit < 0 || daily_transactions > 3) {
-          validate.accepted = false;
-          app.load_validation.push(validate)
-        } else {
-          validate.accepted = true;
-          app.load_validation.push(validate)
-        }
-
+        sendResult(daily_limit, weekly_limit, daily_transactions, validate);
       }
     }
   })
