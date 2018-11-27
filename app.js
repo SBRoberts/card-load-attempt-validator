@@ -117,7 +117,7 @@ app.parseLoadAttempts = (array) => {
         resetLimit(daily_limit);
       }
     }
-    console.log(validate);
+    console.log(app.load_validation);
     axios.post(`http://localhost:5000/results?id=${validate.id}&customer_id=${validate.customer_id}&accepted=${validate.accepted}`);
   })
 }
