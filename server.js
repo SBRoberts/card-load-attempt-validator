@@ -13,6 +13,10 @@ const rl = readline.createInterface({
   input: fs.createReadStream("input.txt"),
   crlfDelay: Infinity
 });
+const rl2 = readline.createInterface({
+  input: fs.createReadStream("output.txt"),
+  crlfDelay: Infinity
+});
 
 const port = process.env.PORT || 5000;
 
@@ -24,10 +28,40 @@ rl.on("line", line => {
   loadAttempts.push(JSON.parse(line))
 })
 
+const output = []
+rl2.on("line", line => {
+  output.push(JSON.parse(line))
+})
+
 // set up API end point to recieve and maniupulate data in a secure way
 app.get('/loadAttempts', (req,res) => {
   res.send(loadAttempts)
 })
+
+// For testing, create an enpoint to fetch output
+app.get('/output', (req,res) => {
+  res.send(output)
+})
+
+// initialize an array to hold results
+const results = {
+  output: []
+}
+// An end point to recieve the results
+app.post('/results', (req, res) => {
+  const result = req.query;
+  // console.log(result);
+  results.output.push(result)
+})
+// const formattedResults = JSON.stringify(results);
+
+setTimeout(() => {
+  fs.writeFile("results.json", JSON.stringify(results), "utf8", () => {
+    console.log('Results written to results.json');
+  });
+}, 20000)
+
+
 
 // create api get request that will read all the inputs
 // format inputs by user - rejecting duplicate load id's

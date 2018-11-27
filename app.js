@@ -6,6 +6,10 @@ app.load_validation = [];
 app.fetchLoadAttempts = () => {
   return axios.get('http://localhost:5000/loadAttempts')
 }
+app.fetchOutput = () => {
+  return axios.get('http://localhost:5000/output')
+}
+
 const formatDateMs = (date) => {
   return new Date(date).getTime()
 }
@@ -31,6 +35,13 @@ const sendResult = (daily_limit, weekly_limit, daily_transactions, validate) => 
   }
 }
 
+const resetLimit = (limit) => {
+  if(limit > 0){
+    limit = 0;
+  }
+  return limit
+}
+
 app.parseLoadAttempts = (array) => {
   array.map((item) => {
     const {customer_id, id, time, load_amount} = item
@@ -39,11 +50,11 @@ app.parseLoadAttempts = (array) => {
     if(!app.track_customers[customer_id]){
       // initialize customer
       app.track_customers[customer_id] = {};
-      app.track_customers[customer_id].day = time
+      app.track_customers[customer_id].currentDay = time
       app.track_customers[customer_id].daily_transactions = 1;
       // object to track weeks
       app.track_customers[customer_id].week = {
-        start: app.track_customers[customer_id].day,
+        start: app.track_customers[customer_id].currentDay,
         current: time,
     };
       // start week count
@@ -59,55 +70,62 @@ app.parseLoadAttempts = (array) => {
       
     } else {
       // initialize useful variables in this scope
-      let { day, week, weekly_limit } = app.track_customers[customer_id]
+      let { currentDay, week, daily_limit, weekly_limit, daily_transactions } = app.track_customers[customer_id]
 
       // Update the current day
-      app.track_customers[customer_id].day = time;
+      app.track_customers[customer_id].currentDay = time;
 
       // Compare current transaction date to previous one
-      const timeBetweenTransactions = countDays(day, time);
+      const timeBetweenTransactions = countDays(currentDay, time);
 
-      // console.log(`User: ${customer_id}`,`Day: ${day}`, `Time: ${time}`, `Count: ${timeBetweenTransactions}`);
+      // reset daily_limit, if necessary
+      resetLimit(daily_limit)
 
+      // console.log(`User: ${customer_id}`,`Day: ${currentDay}`, `Time: ${time}`, `Count: ${timeBetweenTransactions}`);
+
+      // function to update week
       const updateWeek = (week) => {
-        // function to update week
-        // let {start, current, count} = week
         week.current = time;
         week.count = countDays(week.start, week.current)
 
         if(week.count > 6){
           week.start = time;
           week.current = time;
+          resetLimit(weekly_limit);
           week.count = countDays(week.start, week.current)
         } 
         return week
       }
-
       week = updateWeek(week)
 
-      if(timeBetweenTransactions < 0){
+      if(timeBetweenTransactions === 0){
         daily_transactions++;
         daily_limit -= formatLoadAmount(load_amount);
         weekly_limit -= formatLoadAmount(load_amount);
         sendResult(daily_limit, weekly_limit, daily_transactions, validate)
+
+        // reset daily_limit, if necessary
+        resetLimit(daily_limit);
 
       } else {
         daily_transactions = 1;
         daily_limit = 5000 - formatLoadAmount(load_amount);
         weekly_limit = 20000 - formatLoadAmount(load_amount);
         sendResult(daily_limit, weekly_limit, daily_transactions, validate);
+
+        // reset daily_limit, if necessary
+        resetLimit(daily_limit);
       }
     }
+    console.log(validate);
+    axios.post(`http://localhost:5000/results?id=${validate.id}&customer_id=${validate.customer_id}&accepted=${validate.accepted}`);
   })
-  console.log(app.track_customers);
-  console.log(app.load_validation);
 }
 app.init = () => {
   app.fetchLoadAttempts().then(({data}) => {
     const loadAttempts = data;
     app.parseLoadAttempts(loadAttempts)
   })
-  // await app.parseLoadAttempts(app.loadAttempts)
 }
 
 app.init()
